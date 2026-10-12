@@ -59,7 +59,7 @@ int main() {
 	const uint32_t sampleRate = 44100; // muestras por segundo
 	const Envolvente envPorDefecto = { 0.05, 0.1, 0.7, 0.2 };
 
-	std::cout << "\n=== SINTETIZADOR POR CONSOLA ===\n--------------------------------";
+	std::cout << "\n=== GENERADOR DE ONDAS ===\n--------------------------";
 
 	while (true) {
 		std::cout << "\n\nMenú de opciones\n----------------\n";
