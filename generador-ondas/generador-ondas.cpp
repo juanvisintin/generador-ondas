@@ -6,6 +6,8 @@
 #include <fstream>
 #include <string>
 #include <sstream>
+#include <stdexcept>
+#include <limits>
 
 #ifdef _WIN32
 	#define NOMINMAX
@@ -18,6 +20,8 @@ enum class Onda { Senoidal, Cuadrada, Sierra, Triangular };
 
 // Convierte un valor entre -1.0 y 1.0 a un entero de 16 bits
 int16_t aEntero16(double x) {
+	if (x > 1.0) x = 1.0;
+	if (x < -1.0) x = -1.0;
 	return static_cast<int16_t>(x * 32767.0);
 }
 
@@ -45,6 +49,9 @@ void guardarWav(const std::string& ruta,
 	uint32_t sampleRate) {
 
 	std::ofstream out(ruta, std::ios::binary);
+	if (!out) {
+		throw std::runtime_error("No se pudo crear el archivo " + ruta);
+	}
 
 	const uint16_t canales = 1;
 	const uint16_t bitsPorMuestra = 16;
@@ -72,6 +79,10 @@ void guardarWav(const std::string& ruta,
 	escribirU32(out, tamanoDatos);
 	for (int16_t m : muestras) {
 		escribirU16(out, static_cast<uint16_t>(m));
+	}
+
+	if (!out) {
+		throw std::runtime_error("Error al escribir el archivo " + ruta);
 	}
 }
 
@@ -110,8 +121,35 @@ double valorEnvolvente(double t, double duracion, const Envolvente& e) {
 	return v < 0.0 ? 0.0 : v;
 }
 
+void validarParametros(double frecuencia, double duracion, uint32_t sampleRate, double amplitud, const Envolvente& env) {
+	if (frecuencia <= 0.0 || frecuencia >= sampleRate / 2.0) {
+		throw std::invalid_argument("La frecuencia debe ser mayor que 0 y menor que " +
+			std::to_string(sampleRate / 2) + "Hz (límite de Nyquist)");
+	}
+
+	if (duracion <= 0.0) {
+		throw std::invalid_argument("La duración debe ser mayor que 0");
+	}
+
+	if (amplitud <= 0.0 || amplitud > 1.0) {
+		throw std::invalid_argument("La amplitud debe estar entre 0 y 1");
+	}
+
+	if (env.ataque < 0.0 || env.decaimiento < 0.0 || env.liberacion < 0.0 || env.sustain < 0.0 || env.sustain > 1.0) {
+		throw std::invalid_argument("Envolvente inválida: tiempos negativos o sustain fuera de 0 a 1");
+	}
+
+	if (env.ataque + env.decaimiento + env.liberacion > duracion) {
+		throw std::invalid_argument("Ataque + decaimiento + liberacion no pueden superar la duración");
+	}
+}
+
+
 std::vector<double> generarOnda(Onda tipo, double frecuencia, double duracion,
 	uint32_t sampleRate, double amplitud, const Envolvente& env) {
+	
+	validarParametros(frecuencia, duracion, sampleRate, amplitud, env);
+
 	int total = static_cast<int>(sampleRate * duracion);
 	std::vector<double> muestras;
 	
@@ -140,15 +178,22 @@ std::vector<int16_t> convertirA16(const std::vector<double>& muestras) {
 
 // Convierte una nota como "C4", "F#3" o "Bb5" a su frecuencia en Hz
 double frecuenciaDeNota(const std::string& nota) {
+	
+	if (nota.size() < 2) {
+		throw std::invalid_argument("Nota inválida: '" + nota + "'");
+	}
+	
 	int semitono = 0;
 	switch (nota[0]) {
-		case 'C': semitono = 0; break;
 		case 'D': semitono = 2; break;
+		case 'C': semitono = 0; break;
 		case 'E': semitono = 4; break;
 		case 'F': semitono = 5; break;
 		case 'G': semitono = 7; break;
 		case 'A': semitono = 9; break;
 		case 'B': semitono = 11; break;
+		default:
+			throw std::invalid_argument("Nota inválida: '" + nota + "'");
 	}
 	size_t pos = 1;
 	if (nota[pos] == '#') {
@@ -160,7 +205,17 @@ double frecuenciaDeNota(const std::string& nota) {
 		pos++;
 	}
 
-	int octava = std::stoi(nota.substr(pos));
+	int octava = 0;
+	try {
+		octava = std::stoi(nota.substr(pos));
+	}
+	catch (const std::exception&) {
+		throw std::invalid_argument("Nota inválida: '" + nota + "' (falta la octava)");
+	}
+
+	if (octava < 0 || octava > 8) {
+		throw std::invalid_argument("La octava de '" + nota + "'debe estar entre 0 y 8");
+	}
 	int midi = (octava + 1) * 12 + semitono;
 	return 440.0 * std::pow(2.0, (midi - 69) / 12.0);
 }
@@ -168,6 +223,10 @@ double frecuenciaDeNota(const std::string& nota) {
 // Recibe un texto como "C4 E4 G4 R C5" ("R" = silencio) y genera la melodía
 std::vector<double> generarMelodia(const std::string& texto, Onda tipo,
 	double duracionNota, uint32_t sampleRate, double amplitud, const Envolvente& env) {
+
+	if (duracionNota <= 0.0) {
+		throw std::invalid_argument("La duración de cada nota debe ser mayor que 0");
+	}
 
 	std::vector<double> melodia;
 	std::istringstream entrada(texto);
@@ -183,7 +242,47 @@ std::vector<double> generarMelodia(const std::string& texto, Onda tipo,
 		melodia.insert(melodia.end(), parte.begin(), parte.end());
 	}
 
+	if (melodia.empty()) {
+		throw std::invalid_argument("La melodía está vacía");
+	}
+
 	return melodia;
+}
+
+// Pide un número y no avanza hasta que el usuario escriba uno válido
+double leerNumero(const std::string& mensaje) {
+	while (true) {
+		std::cout << mensaje;
+		double valor;
+		if (std::cin >> valor) {
+			return valor;
+		}
+		if (std::cin.eof()) {
+			throw std::runtime_error("Se cerró la entrada de datos");
+		}
+		std::cin.clear(); // limpia el estado de error
+
+		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n'); // descrarta lo escrito
+		std::cout << " Error: entrada inválida. Ingresá un número, no cualquier verdura.\n";
+	}
+}
+
+// Si el nombre no termina en ".wav", se lo agrega
+std::string asegurarExtension(std::string ruta) {
+	if (ruta.size() < 4 || ruta.substr(ruta.size() - 4) != ".wav") {
+		ruta += ".wav";
+	}
+
+	return ruta;
+}
+
+Onda leerTipoDeOnda() {
+	int tipo = static_cast<int>(leerNumero("Forma de onda\n1: Senoidal | 2: Cuadrada | 3: Sierra | 4: Rectangular --> "));
+	if (tipo < 1 || tipo > 4) {
+		throw std::invalid_argument("La forma de onda debe ser un número del 1 al 4");
+	}
+
+	return static_cast<Onda>(tipo - 1);
 }
 
 int main() {
@@ -192,74 +291,72 @@ int main() {
 		SetConsoleCP(CP_UTF8);         // lo que el usuario escribe
 	#endif
 	 
-	const int sampleRate = 44100; // muestras por segundo
+	const uint32_t sampleRate = 44100; // muestras por segundo
 	const Envolvente envPorDefecto = { 0.05, 0.1, 0.7, 0.2 };
 
+	std::cout << "\n=== SINTETIZADOR POR CONSOLA ===\n--------------------------------";
+
 	while (true) {
-		std::cout << "\n=== SINTETIZADOR POR CONSOLA ===\n--------------------------\n";
-		std::cout << "\nMenú de opciones\n";
+		std::cout << "\n\nMenú de opciones\n----------------\n";
 		std::cout << "[1] Generar un tono\n";
 		std::cout << "[2] Generar una melodía\n";
 		std::cout << "[0] Salir\n";
-		std::cout << "[*] Opción --> ";
 		int opcion, usarEnvolvente;
-		std::cin >> opcion;
 
-		if (opcion == 0) {
-			std::cout << "\nAdieu! Bye Bye! Aufwiedersehen!\n\n";
-			break;
-		}
+		try {
+			int opcion = static_cast<int>(leerNumero("[*] Opción --> "));
 
-		if (opcion == 1) {
-			double frecuencia, duracion, amplitud;
-			std::string ruta;
-			int tipo;
-
-			std::cout << "\nFrecuencia (Hz): ";
-			std::cin >> frecuencia;
-			std::cout << "Duracion: (segundos): ";
-			std::cin >> duracion;
-			std::cout << "Amplitud: (0.0 a 1.0): ";
-			std::cin >> amplitud;
-			std::cout << "Forma de onda: (1:Senoidal, 2:Cuadrada, 3:Sierra, 4:Triangular): ";
-			std::cin >> tipo;
-			std::cout << "Usar envolvente ADSR (1: Si, 0: No): ";
-			std::cin >> usarEnvolvente;
-			std::cout << "Nombre del archivo (ej: tono.wav): ";
-			std::getline(std::cin >> std::ws, ruta);
-
-			Envolvente env = { 0.0, 0.1, 1.0, 0.0 }; // sin envolvente, volumen siempre al máximo
-			if (usarEnvolvente == 1) {
-				env = { 0.05, 0.1, 0.7, 0.2 }; // ataque, decay, sustain, release
+			if (opcion == 0) {
+				std::cout << "\nAdieu! Bye Bye! Aufwiedersehen!\n\n";
+				break;
 			}
 
-			std::vector<double> onda = generarOnda(static_cast<Onda>(tipo - 1), frecuencia, duracion, sampleRate, amplitud, env);
+			if (opcion == 1) {
+				std::cout << "\n";
+				Onda tipo = leerTipoDeOnda();
+				double frecuencia = leerNumero("Frecuencia (Hz) --> ");
+				double duracion = leerNumero("Duracion (seg) --> ");
+				double amplitud = leerNumero("Amplitud (0.0 a 1.0) --> ");
+				int usarEnvolvente = static_cast<int>(leerNumero("Envolvente ADSR (1: Si | 0: No) --> "));
+				std::string ruta;
+				std::cout << "Nombre del archivo --> ";
+				std::cin >> ruta;
+				ruta = asegurarExtension(ruta);
 
-			guardarWav(ruta, convertirA16(onda), sampleRate);
-			std::cout << "\n" << ruta << " generado con éxito\n";
+				Envolvente env = { 0.0, 0.0, 1.0, 0.0 };
+				if (usarEnvolvente == 1) {
+					env = envPorDefecto;
+				}
+
+				std::vector<double> onda = generarOnda(tipo, frecuencia, duracion, sampleRate, amplitud, env);
+				guardarWav(ruta, convertirA16(onda), sampleRate);
+				std::cout << "\n" << ruta << " generado con éxito ♫♪";
+
+			}
+			else if (opcion == 2) {
+				std::cout << "\n";
+				Onda tipo = leerTipoDeOnda();
+				double duracionNota = leerNumero("Duracion de cada nota (seg) --> ");
+				double amplitud = leerNumero("Amplitud (0.0 a 1.0) --> ");
+				std::string texto, ruta;
+				std::cout << "Melodía --> ";
+				std::getline(std::cin >> std::ws, texto);
+				std::cout << "Nombre del archivo --> ";
+				std::cin >> ruta;
+				ruta = asegurarExtension(ruta);
+
+				std::vector<double> onda = generarMelodia(texto, tipo, duracionNota, sampleRate, amplitud, envPorDefecto);
+				guardarWav(ruta, convertirA16(onda), sampleRate);
+				std::cout << "\n" << ruta << " generado con éxito ♫♪";
+
+			}
+			else {
+				std::cout << "\nError: opción no válida.\n";
+			}
 		}
-
-		if (opcion == 2) {
-			int tipo;
-			double duracionNota, amplitud;
-			std::string texto, ruta;
-
-			std::cout << "Forma de onda (1: Senoidal | 2: Cuadrada | 3: Sierra | 4: Rectangular): ";
-			std::cin >> tipo;
-			std::cout << "Duración de cada nota (segundos): ";
-			std::cin >> duracionNota;
-			std::cout << "Amplitud (0.0 a 1.0): ";
-			std::cin >> amplitud;
-			std::cout << "Melodía (ej: C4 E4 G4 R C5): ";
-			std::getline(std::cin >> std::ws, texto);
-			std::cout << "Nombre del archivo (ej: melodia.wav): ";
-			std::cin >> ruta;
-
-			std::vector<double> onda = generarMelodia(texto, static_cast<Onda>(tipo - 1), duracionNota, sampleRate, amplitud, envPorDefecto);
-			guardarWav(ruta, convertirA16(onda), sampleRate);
-			std::cout << "\n" << ruta << " generado con éxito ♫ ♪\n";
+		catch (const std::exception& e) {
+			std::cout << "Error: " << e.what() << "\n";
 		}
 	}
-
 	return 0;
 }
