@@ -13,6 +13,8 @@
 
 const double PI = 3.14159265358979323846;
 
+enum class Onda { Senoidal, Cuadrada, Sierra, Triangular };
+
 // Convierte un valor entre -1.0 y 1.0 a un entero de 16 bits
 int16_t aEntero16(double x) {
 	return static_cast<int16_t>(x * 32767.0);
@@ -70,15 +72,32 @@ void guardarWav(const std::string& ruta,
 	for (int16_t m : muestras) {
 		escribirU16(out, static_cast<uint16_t>(m));
 	}
-
 }
 
-std::vector<double> generarSeno(double frecuencia, double duracion, uint32_t sampleRate, double amplitud) {
+// "fase" va de 0.0 a 1.0 y representa en qué punto del ciclo estamos
+double muestraDeOnda(Onda tipo, double fase) {
+	switch (tipo) {
+	case Onda::Senoidal:	return std::sin(2.0 * PI * fase);
+	case Onda::Cuadrada:	return fase < 0.5 ? 1.0 : -1.0;
+	case Onda::Sierra:		return 2.0 * fase - 1.0;
+	case Onda::Triangular:	return 1.0 - 4.0 * std::fabs(fase - 0.5);
+	}
+	return 0.0;
+}
+
+std::vector<double> generarOnda(Onda tipo, double frecuencia, double duracion, uint32_t sampleRate, double amplitud) {
 	int total = static_cast<int>(sampleRate * duracion);
 	std::vector<double> muestras;
+	
+	double fase = 0.0;
+	double incremento = frecuencia / sampleRate;
+	
 	for (int i = 0; i < total; ++i) {
-		double t = static_cast<double>(i) / sampleRate;
-		muestras.push_back(amplitud * std::sin(2.0 * PI * frecuencia * t));
+		muestras.push_back(amplitud * muestraDeOnda(tipo, fase));
+		fase += incremento;
+		if (fase >= 1.0) {
+			fase -= 1.0;
+		}
 	}
 	return muestras;
 }
@@ -92,13 +111,13 @@ std::vector<int16_t> convertirA16(const std::vector<double>& muestras) {
 };
 
 
+
 int main() {
-	
 	#ifdef _WIN32
 		SetConsoleOutputCP(CP_UTF8);   // lo que el programa muestra
 		SetConsoleCP(CP_UTF8);         // lo que el usuario escribe
 	#endif
-	
+	 
 	const int sampleRate = 44100; // muestras por segundo
 
 	while (true) {
@@ -118,6 +137,7 @@ int main() {
 		if (opcion == 1) {
 			double frecuencia, duracion, amplitud;
 			std::string ruta;
+			int tipo;
 
 			std::cout << "\nFrecuencia (Hz): ";
 			std::cin >> frecuencia;
@@ -125,10 +145,12 @@ int main() {
 			std::cin >> duracion;
 			std::cout << "Amplitud: (0.0 a 1.0): ";
 			std::cin >> amplitud;
+			std::cout << "Forma de onda: (1:Senoidal, 2:Cuadrada, 3:Sierra, 4:Triangular): ";
+			std::cin >> tipo;
 			std::cout << "Nombre del archivo (ej: tono.wav): ";
 			std::getline(std::cin >> std::ws, ruta);
 
-			std::vector<double> onda = generarSeno(frecuencia, duracion, sampleRate, amplitud);
+			std::vector<double> onda = generarOnda(static_cast<Onda>(tipo - 1), frecuencia, duracion, sampleRate, amplitud);
 
 			guardarWav(ruta, convertirA16(onda), sampleRate);
 			std::cout << "\n" << ruta << " generado con éxito\n";
