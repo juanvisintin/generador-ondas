@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <fstream>
 #include <string>
+#include <sstream>
 
 #ifdef _WIN32
 	#define NOMINMAX
@@ -137,7 +138,53 @@ std::vector<int16_t> convertirA16(const std::vector<double>& muestras) {
 	return resultado;
 };
 
+// Convierte una nota como "C4", "F#3" o "Bb5" a su frecuencia en Hz
+double frecuenciaDeNota(const std::string& nota) {
+	int semitono = 0;
+	switch (nota[0]) {
+		case 'C': semitono = 0; break;
+		case 'D': semitono = 2; break;
+		case 'E': semitono = 4; break;
+		case 'F': semitono = 5; break;
+		case 'G': semitono = 7; break;
+		case 'A': semitono = 9; break;
+		case 'B': semitono = 11; break;
+	}
+	size_t pos = 1;
+	if (nota[pos] == '#') {
+		semitono += 1;
+		pos++;
+	}
+	else if (nota[pos] == 'b') {
+		semitono -= 1;
+		pos++;
+	}
 
+	int octava = std::stoi(nota.substr(pos));
+	int midi = (octava + 1) * 12 + semitono;
+	return 440.0 * std::pow(2.0, (midi - 69) / 12.0);
+}
+
+// Recibe un texto como "C4 E4 G4 R C5" ("R" = silencio) y genera la melodía
+std::vector<double> generarMelodia(const std::string& texto, Onda tipo,
+	double duracionNota, uint32_t sampleRate, double amplitud, const Envolvente& env) {
+
+	std::vector<double> melodia;
+	std::istringstream entrada(texto);
+	std::string nota;
+	while (entrada >> nota) {
+		std::vector<double> parte;
+		if (nota == "R") {
+			parte.assign(static_cast<size_t>(sampleRate * duracionNota), 0.0);
+		}
+		else {
+			parte = generarOnda(tipo, frecuenciaDeNota(nota), duracionNota, sampleRate, amplitud, env);
+		}
+		melodia.insert(melodia.end(), parte.begin(), parte.end());
+	}
+
+	return melodia;
+}
 
 int main() {
 	#ifdef _WIN32
@@ -146,11 +193,13 @@ int main() {
 	#endif
 	 
 	const int sampleRate = 44100; // muestras por segundo
+	const Envolvente envPorDefecto = { 0.05, 0.1, 0.7, 0.2 };
 
 	while (true) {
-		std::cout << "\n=== GENERADOR DE TONOS ===\n--------------------------\n";
+		std::cout << "\n=== SINTETIZADOR POR CONSOLA ===\n--------------------------\n";
 		std::cout << "\nMenú de opciones\n";
 		std::cout << "[1] Generar un tono\n";
+		std::cout << "[2] Generar una melodía\n";
 		std::cout << "[0] Salir\n";
 		std::cout << "[*] Opción --> ";
 		int opcion, usarEnvolvente;
@@ -188,6 +237,27 @@ int main() {
 
 			guardarWav(ruta, convertirA16(onda), sampleRate);
 			std::cout << "\n" << ruta << " generado con éxito\n";
+		}
+
+		if (opcion == 2) {
+			int tipo;
+			double duracionNota, amplitud;
+			std::string texto, ruta;
+
+			std::cout << "Forma de onda (1: Senoidal | 2: Cuadrada | 3: Sierra | 4: Rectangular): ";
+			std::cin >> tipo;
+			std::cout << "Duración de cada nota (segundos): ";
+			std::cin >> duracionNota;
+			std::cout << "Amplitud (0.0 a 1.0): ";
+			std::cin >> amplitud;
+			std::cout << "Melodía (ej: C4 E4 G4 R C5): ";
+			std::getline(std::cin >> std::ws, texto);
+			std::cout << "Nombre del archivo (ej: melodia.wav): ";
+			std::cin >> ruta;
+
+			std::vector<double> onda = generarMelodia(texto, static_cast<Onda>(tipo - 1), duracionNota, sampleRate, amplitud, envPorDefecto);
+			guardarWav(ruta, convertirA16(onda), sampleRate);
+			std::cout << "\n" << ruta << " generado con éxito ♫ ♪\n";
 		}
 	}
 
