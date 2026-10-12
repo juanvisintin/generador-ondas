@@ -68,46 +68,30 @@ void guardarWav(const std::string& ruta,
 
 }
 
+std::vector<double> generarSeno(double frecuencia, double duracion, uint32_t sampleRate, double amplitud) {
+	int total = static_cast<int>(sampleRate * duracion);
+	std::vector<double> muestras;
+	for (int i = 0; i < total; ++i) {
+		double t = static_cast<double>(i) / sampleRate;
+		muestras.push_back(amplitud * std::sin(2.0 * PI * frecuencia * t));
+	}
+	return muestras;
+}
+
+std::vector<int16_t> convertirA16(const std::vector<double>& muestras) {
+	std::vector<int16_t> resultado;
+	for (double m : muestras) {
+		resultado.push_back(aEntero16(m));
+	}
+	return resultado;
+};
+
+
 int main() {
 	
 	const int sampleRate = 44100; // muestras por segundo
-	const double frecuencia = 440.0; // Hz
-	const double duracion = 1.0; // segundos
-	const double amplitud = 0.2;
 
-	int totalMuestras = static_cast<int>(sampleRate * duracion);
-	std::vector<int16_t> muestras;
-
-	for (int i = 0; i < totalMuestras; ++i) {
-		double t = static_cast<double>(i) / sampleRate; // instante en segundos
-		double valor = std::sin(2.0 * PI * frecuencia * t); // entre -1.0 y 1.0
-		muestras.push_back(aEntero16(valor));
-	}
-
-	std::cout << "\nTotal de muestras: " << muestras.size() << "\n";
-
-	//auto minmax = std::minmax_element(muestras.begin(), muestras.end());
-
-	/*std::cout << "Minimo: " << *minmax.first << " | Maximo: " << *minmax.second << "\n";*/
-	// no entiendo todavía bien qué es todo esto...
-
-	int16_t min = muestras[0];
-	int16_t max = muestras[0];
-
-	for (size_t i = 1; i < muestras.size(); ++i) {
-		if (muestras[i] < min) {
-			min = muestras[i];
-		}
-		if (muestras[i] > max) {
-			max = muestras[i];
-		}
-	}
-
-	std::cout << "\nMinimo: " << min << " | Maximo: " << max << "\n\n";
-
-	for (int i = 0; i < 20; ++i) {
-		std::cout << "Muestra " << i << ": " << muestras[i] << "\n";
-	}
+	//std::vector<double> onda = generarSeno(440.0, 2.0, sampleRate, 0.2);
 
 	std::cout << "\nGENERAR UN .wav";
 	std::cout << "\nNombre del archivo: ";
@@ -115,8 +99,23 @@ int main() {
 	std::getline(std::cin, nombre);
 	nombre = nombre + ".wav";
 
-	guardarWav(nombre, muestras, sampleRate);
-	std::cout << "\nListo: se genero" << nombre << "\n";
+	double frecuencia;
+	std::cout << "\nFrecuencia (double): ";
+	std::cin >> frecuencia;
+
+	double duracion;
+	std::cout << "\nDuracion: (double): ";
+	std::cin >> duracion;
+
+	double amplitud;
+	std::cout << "\nAmplitud: (double): ";
+	std::cin >> amplitud;
+
+	std::vector<double> onda = generarSeno(frecuencia, duracion, sampleRate, amplitud);
+	
+
+	guardarWav(nombre, convertirA16(onda), sampleRate);
+	std::cout << "\nListo: se genero " << nombre << "\n";
 
 	return 0;
 }
