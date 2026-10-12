@@ -6,6 +6,11 @@
 #include <fstream>
 #include <string>
 
+#ifdef _WIN32
+	#define NOMINMAX
+	#include <windows.h>
+#endif
+
 const double PI = 3.14159265358979323846;
 
 // Convierte un valor entre -1.0 y 1.0 a un entero de 16 bits
@@ -89,33 +94,46 @@ std::vector<int16_t> convertirA16(const std::vector<double>& muestras) {
 
 int main() {
 	
+	#ifdef _WIN32
+		SetConsoleOutputCP(CP_UTF8);   // lo que el programa muestra
+		SetConsoleCP(CP_UTF8);         // lo que el usuario escribe
+	#endif
+	
 	const int sampleRate = 44100; // muestras por segundo
 
-	//std::vector<double> onda = generarSeno(440.0, 2.0, sampleRate, 0.2);
+	while (true) {
+		std::cout << "\n=== GENERADOR DE TONOS ===\n--------------------------\n";
+		std::cout << "\nMenú de opciones\n";
+		std::cout << "[1] Generar un tono\n";
+		std::cout << "[0] Salir\n";
+		std::cout << "[*] Opción --> ";
+		int opcion;
+		std::cin >> opcion;
 
-	std::cout << "\nGENERAR UN .wav";
-	std::cout << "\nNombre del archivo: ";
-	std::string nombre;
-	std::getline(std::cin, nombre);
-	nombre = nombre + ".wav";
+		if (opcion == 0) {
+			std::cout << "\nAdieu! Bye Bye! Aufwiedersehen!\n\n";
+			break;
+		}
 
-	double frecuencia;
-	std::cout << "\nFrecuencia (double): ";
-	std::cin >> frecuencia;
+		if (opcion == 1) {
+			double frecuencia, duracion, amplitud;
+			std::string ruta;
 
-	double duracion;
-	std::cout << "\nDuracion: (double): ";
-	std::cin >> duracion;
+			std::cout << "\nFrecuencia (Hz): ";
+			std::cin >> frecuencia;
+			std::cout << "Duracion: (segundos): ";
+			std::cin >> duracion;
+			std::cout << "Amplitud: (0.0 a 1.0): ";
+			std::cin >> amplitud;
+			std::cout << "Nombre del archivo (ej: tono.wav): ";
+			std::getline(std::cin >> std::ws, ruta);
 
-	double amplitud;
-	std::cout << "\nAmplitud: (double): ";
-	std::cin >> amplitud;
+			std::vector<double> onda = generarSeno(frecuencia, duracion, sampleRate, amplitud);
 
-	std::vector<double> onda = generarSeno(frecuencia, duracion, sampleRate, amplitud);
-	
-
-	guardarWav(nombre, convertirA16(onda), sampleRate);
-	std::cout << "\nListo: se genero " << nombre << "\n";
+			guardarWav(ruta, convertirA16(onda), sampleRate);
+			std::cout << "\n" << ruta << " generado con éxito\n";
+		}
+	}
 
 	return 0;
 }

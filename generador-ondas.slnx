@@ -3,5 +3,5 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="generador-ondas/generador-ondas.vcxproj" />
+  <Project Path="generador-ondas/generador-ondas.vcxproj" Id="95cbf621-9599-40cd-9299-578b166af1fd" />
 </Solution>
