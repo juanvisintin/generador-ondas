@@ -139,7 +139,17 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="envolvente.cpp" />
     <ClCompile Include="generador-ondas.cpp" />
+    <ClCompile Include="notas.cpp" />
+    <ClCompile Include="oscilador.cpp" />
+    <ClCompile Include="wav.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="envolvente.h" />
+    <ClInclude Include="notas.h" />
+    <ClInclude Include="oscilador.h" />
+    <ClInclude Include="wav.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
