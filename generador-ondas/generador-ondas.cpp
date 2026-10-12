@@ -85,15 +85,42 @@ double muestraDeOnda(Onda tipo, double fase) {
 	return 0.0;
 }
 
-std::vector<double> generarOnda(Onda tipo, double frecuencia, double duracion, uint32_t sampleRate, double amplitud) {
+struct Envolvente {
+	double ataque; // segundos que tarda en subir de 0 a 1
+	double decaimiento; // segundos que tarda en bajar de 1 al nivel sostenido
+	double sustain; // nivel de sostenido (0.0 a 1.0)
+	double liberacion; // segundos que tarda en bajar a 0 al final
+};
+
+// Devuelve el volumen (0.0 a 1.0) en el instante t de una nota de "duración" segundos
+double valorEnvolvente(double t, double duracion, const Envolvente& e) {
+	double inicioLiberacion = duracion - e.liberacion;
+
+	if (t < e.ataque) {
+		return t / e.ataque;
+	}
+	if (t < e.ataque + e.decaimiento) {
+		return 1.0 - (1.0 - e.sustain) * (t - e.ataque) / e.decaimiento;
+	}
+	if (t < inicioLiberacion) {
+		return e.sustain;
+	}
+	double v = e.sustain * (1.0 - (t - inicioLiberacion) / e.liberacion);
+	return v < 0.0 ? 0.0 : v;
+}
+
+std::vector<double> generarOnda(Onda tipo, double frecuencia, double duracion,
+	uint32_t sampleRate, double amplitud, const Envolvente& env) {
 	int total = static_cast<int>(sampleRate * duracion);
 	std::vector<double> muestras;
 	
 	double fase = 0.0;
-	double incremento = frecuencia / sampleRate;
+	double incremento = frecuencia / sampleRate; // cuánto avanza la fase en cada muestra
 	
 	for (int i = 0; i < total; ++i) {
-		muestras.push_back(amplitud * muestraDeOnda(tipo, fase));
+		double t = static_cast<double>(i) / sampleRate;
+		double volumen = valorEnvolvente(t, duracion, env);
+		muestras.push_back(amplitud * volumen * muestraDeOnda(tipo, fase));
 		fase += incremento;
 		if (fase >= 1.0) {
 			fase -= 1.0;
@@ -126,7 +153,7 @@ int main() {
 		std::cout << "[1] Generar un tono\n";
 		std::cout << "[0] Salir\n";
 		std::cout << "[*] Opción --> ";
-		int opcion;
+		int opcion, usarEnvolvente;
 		std::cin >> opcion;
 
 		if (opcion == 0) {
@@ -147,10 +174,17 @@ int main() {
 			std::cin >> amplitud;
 			std::cout << "Forma de onda: (1:Senoidal, 2:Cuadrada, 3:Sierra, 4:Triangular): ";
 			std::cin >> tipo;
+			std::cout << "Usar envolvente ADSR (1: Si, 0: No): ";
+			std::cin >> usarEnvolvente;
 			std::cout << "Nombre del archivo (ej: tono.wav): ";
 			std::getline(std::cin >> std::ws, ruta);
 
-			std::vector<double> onda = generarOnda(static_cast<Onda>(tipo - 1), frecuencia, duracion, sampleRate, amplitud);
+			Envolvente env = { 0.0, 0.1, 1.0, 0.0 }; // sin envolvente, volumen siempre al máximo
+			if (usarEnvolvente == 1) {
+				env = { 0.05, 0.1, 0.7, 0.2 }; // ataque, decay, sustain, release
+			}
+
+			std::vector<double> onda = generarOnda(static_cast<Onda>(tipo - 1), frecuencia, duracion, sampleRate, amplitud, env);
 
 			guardarWav(ruta, convertirA16(onda), sampleRate);
 			std::cout << "\n" << ruta << " generado con éxito\n";
