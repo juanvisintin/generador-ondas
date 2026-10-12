@@ -109,8 +109,14 @@ int main() {
 		std::cout << "Muestra " << i << ": " << muestras[i] << "\n";
 	}
 
-	guardarWav("tono.wav", muestras, sampleRate);
-	std::cout << "\nListo: se genero tono.wav\n";
+	std::cout << "\nGENERAR UN .wav";
+	std::cout << "\nNombre del archivo: ";
+	std::string nombre;
+	std::getline(std::cin, nombre);
+	nombre = nombre + ".wav";
+
+	guardarWav(nombre, muestras, sampleRate);
+	std::cout << "\nListo: se genero" << nombre << "\n";
 
 	return 0;
 }
